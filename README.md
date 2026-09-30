@@ -1,0 +1,170 @@
+# betocampoy/champs-whatsapp-sdk
+
+SDK PHP para o gateway WhatsApp **`champs-whatsapp-gateway`** (Node + Baileys).
+Fala o **contrato v1** do gateway (`champs-whatsapp-gateway/docs/contrato-api-v1.md`)
+e concentra as regras do protocolo do WhatsApp que qualquer aplicação precisa
+seguir. Serve para qualquer projeto PHP do ecossistema (Symfony ou legado).
+
+**O que o SDK é:** a camada de comunicação. **O que ele não é:** ele não
+conhece tenant, Unidade, usuário, atendimento, Doctrine, banco nem fila.
+Isso é da aplicação.
+
+```
+ 3. Domínio da aplicação   (ex.: módulo WhatsApp do MEMOD)   ← seu código
+ 2. Adaptador da aplicação (rota do webhook, persistência)   ← seu código, fino
+ 1. champs-whatsapp-sdk    (este pacote)
+ 0. champs-whatsapp-gateway (serviço Node, um por servidor, acesso local)
+```
+
+## Requisitos
+
+- PHP >= 8.2
+- `symfony/http-client` ^6.4 ou ^7 (instalado junto; usado por um adapter trocável)
+- Um gateway `champs-whatsapp-gateway` acessível (normalmente `http://127.0.0.1:3333`)
+  e a API key dele
+
+## Instalação
+
+```bash
+composer require betocampoy/champs-whatsapp-sdk
+```
+
+Durante o desenvolvimento do pacote, o projeto consumidor pode apontar para a
+cópia local (path repository, mudanças aparecem na hora):
+
+```json
+{
+  "repositories": [
+    { "type": "path", "url": "../champs-whatsapp-sdk", "options": { "symlink": true } }
+  ],
+  "require": { "betocampoy/champs-whatsapp-sdk": "*@dev" }
+}
+```
+
+## Uso rápido
+
+```php
+use BetoCampoy\Champs\WhatsappSdk\WhatsappGatewayClient;
+
+$gateway = WhatsappGatewayClient::create('http://127.0.0.1:3333', $apiKey);
+
+$session = $gateway->startSession($sessionId);   // fica em "qr"
+$png = $gateway->getQrPng($sessionId);           // bytes do PNG, ou null se não há QR
+$session = $gateway->getSession($sessionId);     // consulte até isConnected()
+
+if ($session->status->isConnected()) {
+    echo $session->owner?->phone();              // 5516996529659
+    $result = $gateway->sendText($sessionId, '5516981075088', 'Olá!');
+    // guarde $result->waMessageId (para casar o ack) e $result->clientMessageId (reenvio seguro)
+}
+```
+
+`$sessionId`: `[A-Za-z0-9_-]{1,64}`, escolhido pela aplicação (ex. UUID).
+
+### Symfony (`config/services.yaml`)
+
+```yaml
+BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface:
+    factory: ['BetoCampoy\Champs\WhatsappSdk\WhatsappGatewayClient', 'create']
+    arguments:
+        $baseUrl: '%env(MEU_APP_WHATSAPP_GATEWAY_BASE_URL)%'
+        $apiKey: '%env(MEU_APP_WHATSAPP_GATEWAY_API_KEY)%'   # segredo: .env.local
+
+# dev/teste: sem gateway, sem WhatsApp
+when@test:
+    services:
+        BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface:
+            class: BetoCampoy\Champs\WhatsappSdk\Testing\FakeWhatsappGateway
+```
+
+Injete sempre a **interface** `WhatsappGatewayInterface`, nunca a classe.
+
+### Legado (PHP puro)
+
+```php
+require 'vendor/autoload.php';
+$gateway = \BetoCampoy\Champs\WhatsappSdk\WhatsappGatewayClient::create($url, $apiKey);
+```
+
+## API (`WhatsappGatewayInterface`)
+
+| Método | Retorno | Observação |
+|---|---|---|
+| `health()` | `GatewayHealth` | `WhatsappGatewayClient::isCompatible($health)` confere a versão do contrato |
+| `startSession($id, ?WebhookTarget)` | `Session` | idempotente. `WebhookTarget(url, secret)` diz para onde o gateway manda os eventos |
+| `getSession($id)` | `Session` | `status`, `owner` (telefone, LID, nome), `hasQr`, `lastError` |
+| `listSessions()` | `Session[]` | |
+| `getQrPng($id)` | `?string` | PNG, ou `null` quando não há QR (já conectada ou gerando) |
+| `logout($id)` | `void` | desconecta o aparelho e apaga as credenciais (volta só com QR novo) |
+| `stopSession($id)` | `void` | para, mantendo as credenciais (volta sem QR) |
+| `sendText($id, $to, $text, ?$clientMessageId)` | `SendResult` | `$to`: dígitos, JID ou LID. **202 = aceito, não entregue** |
+
+### Erros
+
+Todas as exceções estendem `WhatsappException`:
+
+| Exceção | Quando |
+|---|---|
+| `TransportException` | gateway inalcançável (fora do ar, timeout, rede) |
+| `AuthenticationException` | API key inválida (401). Erro de configuração |
+| `SessionNotFoundException` | sessão não existe no gateway |
+| `GatewayException` | outro erro do gateway. `getHttpStatus()` e `getErrorCode()`: `session_not_connected` (409), `recipient_not_found` (404), ... |
+
+## Regras do protocolo (use o SDK, não reimplemente)
+
+Observadas no teste real em produção (2026-09-30), fazem parte do contrato:
+
+1. **Contato pode não ter telefone.** No Baileys v7 muitos contatos chegam só
+   com LID (`170712199389204@lid`). Nunca use o telefone como única chave.
+   `Support\Jid` separa telefone, LID, grupo e sufixo de aparelho
+   (`Jid::parse('157857345462309:46@lid')->bare()` → `157857345462309@lid`).
+2. **Ack casa por `waMessageId`**, nunca pelo destinatário: o ack de uma
+   mensagem enviada para um telefone volta com o LID.
+3. **Status de entrega só avança.** Acks chegam fora de ordem e repetidos.
+   Antes de gravar um ack: `$atual->shouldReplace($novo)` (`Enum\AckStatus`).
+4. **Envio é idempotente por `clientMessageId`.** Gere antes de enviar
+   (`Support\ClientMessageId::generate()`), guarde, e reenvie com o mesmo id.
+
+## Testes na aplicação: `FakeWhatsappGateway`
+
+Gateway falso em memória, para desenvolvimento local e testes da aplicação
+(sem Node, sem WhatsApp):
+
+```php
+$fake = new FakeWhatsappGateway(connectAfterPolls: 3, fakePhone: '5511999990000');
+$fake->startSession('s1');          // qr
+$fake->getSession('s1');            // ... na 3ª consulta: connected
+$fake->simulateConnected('s1');     // ou força
+$fake->simulateLoggedOut('s1');     // aparelho removido pelo celular
+$fake->sendText('s1', '5511...', 'oi');
+$fake->sent;                        // envios registrados
+```
+
+Para ver o fluxo **real** (QR de verdade com um número de teste), suba o
+gateway localmente (Node >= 20) e aponte o `baseUrl` para ele.
+
+## Versões
+
+- SDK `0.x`/`1.x` fala o **contrato v1** do gateway.
+- `GatewayHealth::$apiVersion` nulo = gateway POC, anterior ao campo: aceito.
+
+## Roadmap
+
+- **Etapa atual (0.1):** sessões, QR, status, envio de texto, regras de
+  protocolo (`Jid`, `AckStatus`, `ClientMessageId`), fake.
+- **Próxima (webhooks):** `Webhook\WebhookVerifier` (HMAC + janela de 5 min),
+  `Webhook\WebhookParser` → eventos tipados (`MessageReceivedEvent`,
+  `MessageStatusEvent`, ...), `Contracts\WebhookSecretResolverInterface`,
+  `Bridge\Symfony\WhatsappWebhookRequest`, `Testing\WebhookFactory`.
+- Depois: mídia, marcar como lido, presença, foto de perfil.
+
+## Desenvolvimento
+
+```bash
+composer install
+vendor/bin/phpunit
+```
+
+## Licença
+
+MIT

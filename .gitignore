@@ -1,0 +1,50 @@
+# Dependências
+/vendor/
+composer.lock
+
+# Cache e builds
+/.phpunit.cache/
+/.phpunit.result.cache
+/.php-cs-fixer.cache
+/.phpstan
+/.phpstan.cache
+coverage/
+build/
+*.log
+
+# Arquivos temporários
+*.tmp
+*.swp
+*.bak
+
+# Ambiente local
+.env
+.env.local
+.env.test
+.env.dev
+.env.*.local
+
+# IDEs e editores
+.idea/
+.vscode/
+nbproject/
+*.sublime-project
+*.sublime-workspace
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Arquivos ocultos de controle
+*.orig
+*.rej
+
+# Backups
+*.old
+*.save
+*.backup
+
+# Outras pastas de exemplo ou sandbox
+/examples/output/
+sandbox/
