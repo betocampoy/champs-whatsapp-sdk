@@ -42,13 +42,20 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
     private int $messageSeq = 0;
 
     /**
-     * @param int    $connectAfterPolls consultas em `qr` até conectar sozinho (0 = nunca, só via simulateConnected)
-     * @param string $fakePhone         telefone que aparece como "número conectado"
+     * @param int         $connectAfterPolls consultas em `qr` até conectar sozinho (0 = nunca, só via simulateConnected)
+     * @param string      $fakePhone         telefone que aparece como "número conectado"
+     * @param string|null $stateFile         arquivo JSON onde o estado sobrevive entre requisições HTTP.
+     *                                       Null (padrão) = só em memória, o que basta para testes. Para usar
+     *                                       o fake NO NAVEGADOR (dev local, ex. QR "conectando" entre várias
+     *                                       consultas), informe um caminho gravável, ex. `var/whatsapp-fake-gateway.json`.
      */
     public function __construct(
         private readonly int $connectAfterPolls = 3,
         private readonly string $fakePhone = '5511999990000',
-    ) {}
+        private readonly ?string $stateFile = null,
+    ) {
+        $this->load();
+    }
 
     public function health(): GatewayHealth
     {
@@ -73,6 +80,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
             'owner' => $resume ? $current['owner'] : null,
             'webhook' => $webhook ?? $current['webhook'] ?? null,
         ];
+        $this->save();
 
         return $this->toSession($sessionId);
     }
@@ -102,12 +110,14 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
     {
         $this->require($sessionId);
         unset($this->sessions[$sessionId]);
+        $this->save();
     }
 
     public function stopSession(string $sessionId): void
     {
         $this->require($sessionId);
         $this->sessions[$sessionId]['status'] = SessionStatus::STOPPED;
+        $this->save();
     }
 
     public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null): SendResult
@@ -128,6 +138,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
 
         $waMessageId = sprintf('FAKE%012d', ++$this->messageSeq);
         $this->sent[] = compact('sessionId', 'to', 'text', 'clientMessageId', 'waMessageId');
+        $this->save();
 
         return new SendResult($waMessageId, $this->toJid($to), $clientMessageId);
     }
@@ -139,6 +150,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         $this->require($sessionId);
         $this->sessions[$sessionId]['status'] = SessionStatus::CONNECTED;
         $this->sessions[$sessionId]['owner'] = $this->fakeOwner();
+        $this->save();
     }
 
     /** O usuário removeu o aparelho pelo celular. */
@@ -147,6 +159,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         $this->require($sessionId);
         $this->sessions[$sessionId]['status'] = SessionStatus::LOGGED_OUT;
         $this->sessions[$sessionId]['owner'] = null;
+        $this->save();
     }
 
     public function webhookOf(string $sessionId): ?WebhookTarget
@@ -169,6 +182,68 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
             $session['status'] = SessionStatus::CONNECTED;
             $session['owner'] = $this->fakeOwner();
         }
+        unset($session);
+        $this->save();
+    }
+
+    private function load(): void
+    {
+        if ($this->stateFile === null || !is_file($this->stateFile)) {
+            return;
+        }
+
+        $data = json_decode((string) file_get_contents($this->stateFile), true);
+        if (!is_array($data)) {
+            return;
+        }
+
+        foreach ($data['sessions'] ?? [] as $id => $s) {
+            $owner = null;
+            if (is_array($s['owner'] ?? null)) {
+                $owner = new SessionOwner(Jid::parse($s['owner']['jid']), Jid::tryParse($s['owner']['lid'] ?? null), $s['owner']['name'] ?? null);
+            }
+            $webhook = is_array($s['webhook'] ?? null) ? new WebhookTarget($s['webhook']['url'], $s['webhook']['secret']) : null;
+
+            $this->sessions[(string) $id] = [
+                'status' => SessionStatus::fromGateway($s['status'] ?? null),
+                'polls' => (int) ($s['polls'] ?? 0),
+                'owner' => $owner,
+                'webhook' => $webhook,
+            ];
+        }
+        $this->sent = $data['sent'] ?? [];
+        $this->messageSeq = (int) ($data['messageSeq'] ?? 0);
+    }
+
+    private function save(): void
+    {
+        if ($this->stateFile === null) {
+            return;
+        }
+
+        $sessions = [];
+        foreach ($this->sessions as $id => $s) {
+            $sessions[$id] = [
+                'status' => $s['status']->value,
+                'polls' => $s['polls'],
+                'owner' => $s['owner'] === null ? null : [
+                    'jid' => (string) $s['owner']->jid,
+                    'lid' => $s['owner']->lid?->bare(),
+                    'name' => $s['owner']->name,
+                ],
+                'webhook' => $s['webhook'] === null ? null : ['url' => $s['webhook']->url, 'secret' => $s['webhook']->secret],
+            ];
+        }
+
+        $dir = dirname($this->stateFile);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+        file_put_contents(
+            $this->stateFile,
+            json_encode(['sessions' => $sessions, 'sent' => $this->sent, 'messageSeq' => $this->messageSeq], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+            LOCK_EX,
+        );
     }
 
     private function require(string $sessionId): void

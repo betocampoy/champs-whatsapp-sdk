@@ -67,6 +67,30 @@ final class FakeWhatsappGatewayTest extends TestCase
         $gw->getSession('s1');
     }
 
+    /** Cada requisição HTTP cria um fake novo: com stateFile o ciclo QR → conectado atravessa requisições. */
+    public function testStateFileSobreviveEntreInstancias(): void
+    {
+        $file = sys_get_temp_dir() . '/champs-whatsapp-fake-' . bin2hex(random_bytes(4)) . '/estado.json';
+
+        try {
+            (new FakeWhatsappGateway(connectAfterPolls: 2, stateFile: $file))->startSession('s1');
+            (new FakeWhatsappGateway(connectAfterPolls: 2, stateFile: $file))->getQrPng('s1');          // 1ª consulta
+            $session = (new FakeWhatsappGateway(connectAfterPolls: 2, stateFile: $file))->getSession('s1'); // 2ª: conecta
+
+            self::assertTrue($session->status->isConnected());
+            self::assertNotNull($session->owner?->lid);
+
+            $b = new FakeWhatsappGateway(connectAfterPolls: 2, stateFile: $file);
+            $b->sendText('s1', '5516999999999', 'oi', 'id-x');
+            $c = new FakeWhatsappGateway(connectAfterPolls: 2, stateFile: $file);
+            self::assertCount(1, $c->sent);
+            self::assertSame($b->sent[0]['waMessageId'], $c->sendText('s1', '5516999999999', 'oi', 'id-x')->waMessageId);
+        } finally {
+            @unlink($file);
+            @rmdir(dirname($file));
+        }
+    }
+
     public function testDesconectadoPeloCelularVoltaComQr(): void
     {
         $gw = new FakeWhatsappGateway(connectAfterPolls: 0);

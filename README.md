@@ -138,6 +138,9 @@ $fake->simulateConnected('s1');     // ou força
 $fake->simulateLoggedOut('s1');     // aparelho removido pelo celular
 $fake->sendText('s1', '5511...', 'oi');
 $fake->sent;                        // envios registrados
+
+// no navegador (dev local), para o estado sobreviver entre requisições HTTP:
+$fake = new FakeWhatsappGateway(stateFile: __DIR__ . "/var/whatsapp-fake-gateway.json");
 ```
 
 Para ver o fluxo **real** (QR de verdade com um número de teste), suba o
