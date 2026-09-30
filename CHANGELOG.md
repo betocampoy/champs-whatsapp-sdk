@@ -15,5 +15,7 @@
   `Support\ClientMessageId`.
 - Exceções `WhatsappException`, `TransportException`, `GatewayException`,
   `AuthenticationException`, `SessionNotFoundException`.
-- `Testing\FakeWhatsappGateway` para desenvolvimento e testes das aplicações.
-- Testes: 35 unitários + teste manual contra o gateway POC real.
+- `Testing\FakeWhatsappGateway` para desenvolvimento e testes das aplicações,
+  com `stateFile` opcional para o estado sobreviver entre requisições HTTP
+  (uso no navegador).
+- Testes: 36 unitários + teste manual contra o gateway POC real.
