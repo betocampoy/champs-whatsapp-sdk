@@ -209,6 +209,9 @@ gateway localmente (Node >= 20) e aponte o `baseUrl` para ele.
   tipados, webhooks simulados no fake.
 - **0.3:** mídia: `getMedia()` (o gateway baixa na chegada e guarda por 24 h:
   busque logo e guarde do seu lado), `sendMedia()` com `MediaKind::fromMimetype()`.
+- **0.4:** responder citando: `Dto\QuotedMessage` no último parâmetro de
+  `sendText()`/`sendMedia()`; `IncomingMessage::$quotedWaMessageId` quando o
+  cliente responde citando uma mensagem.
 - Depois: marcar como lido, presença, foto de perfil.
 
 ## Desenvolvimento

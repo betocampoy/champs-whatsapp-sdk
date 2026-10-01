@@ -6,6 +6,7 @@ namespace BetoCampoy\Champs\WhatsappSdk\Contracts;
 
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
 use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Dto\QuotedMessage;
 use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
 use BetoCampoy\Champs\WhatsappSdk\Dto\Session;
@@ -64,7 +65,7 @@ interface WhatsappGatewayInterface
      * @throws SessionNotFoundException
      * @throws GatewayException 409 se a sessão não está conectada; 404 se o número não tem WhatsApp
      */
-    public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null): SendResult;
+    public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null, ?QuotedMessage $quoted = null): SendResult;
 
     /**
      * Envia um anexo (bytes em memória; vão em base64 para o gateway local).
@@ -82,6 +83,7 @@ interface WhatsappGatewayInterface
         ?string $fileName = null,
         ?string $caption = null,
         ?string $clientMessageId = null,
+        ?QuotedMessage $quoted = null,
     ): SendResult;
 
     /**

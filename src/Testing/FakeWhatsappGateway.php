@@ -7,6 +7,7 @@ namespace BetoCampoy\Champs\WhatsappSdk\Testing;
 use BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface;
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
 use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Dto\QuotedMessage;
 use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
 use BetoCampoy\Champs\WhatsappSdk\Dto\Session;
@@ -128,7 +129,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         $this->save();
     }
 
-    public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null): SendResult
+    public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null, ?QuotedMessage $quoted = null): SendResult
     {
         $this->require($sessionId);
         if ($this->sessions[$sessionId]['status'] !== SessionStatus::CONNECTED) {
@@ -145,7 +146,8 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         }
 
         $waMessageId = sprintf('FAKE%012d', ++$this->messageSeq);
-        $this->sent[] = compact('sessionId', 'to', 'text', 'clientMessageId', 'waMessageId');
+        $quotedWaMessageId = $quoted?->waMessageId;
+        $this->sent[] = compact('sessionId', 'to', 'text', 'clientMessageId', 'waMessageId', 'quotedWaMessageId');
         $this->save();
 
         return new SendResult($waMessageId, $this->toJid($to), $clientMessageId);
@@ -160,8 +162,9 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         ?string $fileName = null,
         ?string $caption = null,
         ?string $clientMessageId = null,
+        ?QuotedMessage $quoted = null,
     ): SendResult {
-        $resultado = $this->sendText($sessionId, $to, $caption ?? '', $clientMessageId);
+        $resultado = $this->sendText($sessionId, $to, $caption ?? '', $clientMessageId, $quoted);
         // completa o registro do envio com os dados do anexo (o sendText já gravou o resto)
         foreach ($this->sent as $i => $item) {
             if ($item['waMessageId'] === $resultado->waMessageId) {
@@ -241,8 +244,12 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         ?string $lid = null,
         ?\DateTimeImmutable $at = null,
         ?string $waMessageId = null,
+        ?string $quotedWaMessageId = null,
     ): SimulatedWebhook {
-        return $this->webhook($sessionId, WebhookEventType::MESSAGE_RECEIVED, $this->messageData(false, $phone, $lid, $text, $pushName, $at, $waMessageId));
+        $data = $this->messageData(false, $phone, $lid, $text, $pushName, $at, $waMessageId);
+        $data['quotedWaMessageId'] = $quotedWaMessageId;
+
+        return $this->webhook($sessionId, WebhookEventType::MESSAGE_RECEIVED, $data);
     }
 
     /** Alguém respondeu pelo celular, fora da aplicação. */

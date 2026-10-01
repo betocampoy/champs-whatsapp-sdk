@@ -24,6 +24,8 @@ final class IncomingMessage
         public readonly ?string $text,
         public readonly bool $hasMedia,
         public readonly ?MediaInfo $media,
+        /** Respondeu citando esta mensagem (id do WhatsApp), ou null. */
+        public readonly ?string $quotedWaMessageId = null,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -50,6 +52,7 @@ final class IncomingMessage
             text: isset($data['text']) ? (string) $data['text'] : null,
             hasMedia: (bool) ($data['hasMedia'] ?? false),
             media: is_array($data['media'] ?? null) ? MediaInfo::fromArray($data['media']) : null,
+            quotedWaMessageId: isset($data['quotedWaMessageId']) && '' !== $data['quotedWaMessageId'] ? (string) $data['quotedWaMessageId'] : null,
         );
     }
 }

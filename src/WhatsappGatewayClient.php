@@ -8,6 +8,7 @@ use BetoCampoy\Champs\WhatsappSdk\Contracts\HttpClientAdapterInterface;
 use BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface;
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
 use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Dto\QuotedMessage;
 use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
 use BetoCampoy\Champs\WhatsappSdk\Dto\Session;
@@ -122,7 +123,7 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
         $this->json('DELETE', $this->sessionPath($sessionId), sessionRoute: true);
     }
 
-    public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null): SendResult
+    public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null, ?QuotedMessage $quoted = null): SendResult
     {
         if (trim($to) === '') {
             throw new \InvalidArgumentException('Destinatário vazio.');
@@ -133,12 +134,13 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
 
         $clientMessageId ??= ClientMessageId::generate();
 
-        $data = $this->json('POST', $this->sessionPath($sessionId) . '/messages', [
+        $data = $this->json('POST', $this->sessionPath($sessionId) . '/messages', array_filter([
             'clientMessageId' => $clientMessageId,
             'to' => $to,
             'type' => 'text',
             'text' => $text,
-        ], sessionRoute: true, notFoundMayBeRecipient: true);
+            'quoted' => $quoted?->toArray(),
+        ], static fn ($v) => $v !== null), sessionRoute: true, notFoundMayBeRecipient: true);
 
         if (!isset($data['waMessageId']) || !is_string($data['waMessageId'])) {
             throw new GatewayException('Gateway aceitou o envio mas não devolveu waMessageId.', 502, 'invalid_response');
@@ -156,6 +158,7 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
         ?string $fileName = null,
         ?string $caption = null,
         ?string $clientMessageId = null,
+        ?QuotedMessage $quoted = null,
     ): SendResult {
         if (trim($to) === '') {
             throw new \InvalidArgumentException('Destinatário vazio.');
@@ -174,6 +177,7 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
             'mimetype' => $mimetype,
             'fileName' => $fileName,
             'caption' => $kind->aceitaLegenda() ? $caption : null,
+            'quoted' => $quoted?->toArray(),
         ], static fn ($v) => $v !== null && $v !== ''), sessionRoute: true, notFoundMayBeRecipient: true);
 
         if (!isset($data['waMessageId']) || !is_string($data['waMessageId'])) {

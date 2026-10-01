@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0] - 2026-10-01
+
+### Adicionado
+- Responder citando: `Dto\QuotedMessage` (waMessageId, fromMe, trecho do
+  texto, cortado em 300 caracteres) como último parâmetro opcional de
+  `sendText()` e `sendMedia()`; vai no campo `quoted` do contrato v1.
+- `Dto\Webhook\IncomingMessage::$quotedWaMessageId`: id da mensagem citada.
+- `FakeWhatsappGateway`: `simulateIncomingMessage(..., quotedWaMessageId:)` e
+  `quotedWaMessageId` registrado em `$sent`.
+
+### Mudou (incompatível para quem implementa a interface)
+- `sendText()` e `sendMedia()` da `WhatsappGatewayInterface` ganharam
+  `?QuotedMessage $quoted = null`.
+
 ## [0.3.0] - 2026-10-01
 
 ### Adicionado
