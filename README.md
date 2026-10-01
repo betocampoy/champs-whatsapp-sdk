@@ -207,7 +207,9 @@ gateway localmente (Node >= 20) e aponte o `baseUrl` para ele.
   `AckStatus`, `ClientMessageId`), fake.
 - **0.2:** webhooks: `Webhook\WebhookVerifier`, `Webhook\WebhookEvent` com DTOs
   tipados, webhooks simulados no fake.
-- Depois: mídia, marcar como lido, presença, foto de perfil.
+- **0.3:** mídia: `getMedia()` (o gateway baixa na chegada e guarda por 24 h:
+  busque logo e guarde do seu lado), `sendMedia()` com `MediaKind::fromMimetype()`.
+- Depois: marcar como lido, presença, foto de perfil.
 
 ## Desenvolvimento
 

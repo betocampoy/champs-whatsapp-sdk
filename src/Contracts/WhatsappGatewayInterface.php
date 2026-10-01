@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace BetoCampoy\Champs\WhatsappSdk\Contracts;
 
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
+use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
 use BetoCampoy\Champs\WhatsappSdk\Dto\Session;
 use BetoCampoy\Champs\WhatsappSdk\Dto\WebhookTarget;
@@ -63,4 +65,28 @@ interface WhatsappGatewayInterface
      * @throws GatewayException 409 se a sessão não está conectada; 404 se o número não tem WhatsApp
      */
     public function sendText(string $sessionId, string $to, string $text, ?string $clientMessageId = null): SendResult;
+
+    /**
+     * Envia um anexo (bytes em memória; vão em base64 para o gateway local).
+     * `$caption` é ignorada em áudio. Mesmas regras de `$to`/idempotência do sendText().
+     *
+     * @throws SessionNotFoundException
+     * @throws GatewayException 400 se o arquivo passa do limite do gateway; 409/404 como no sendText()
+     */
+    public function sendMedia(
+        string $sessionId,
+        string $to,
+        MediaKind $kind,
+        string $bytes,
+        string $mimetype,
+        ?string $fileName = null,
+        ?string $caption = null,
+        ?string $clientMessageId = null,
+    ): SendResult;
+
+    /**
+     * Mídia de uma mensagem recebida (`IncomingMessage::$media->available`).
+     * Null quando o gateway já não tem (expirou ou nunca baixou).
+     */
+    public function getMedia(string $sessionId, string $waMessageId): ?MediaFile;
 }

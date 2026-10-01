@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0] - 2026-10-01
+
+### Adicionado
+- Mídia: `getMedia()` → `Dto\MediaFile` (bytes, mimetype, nome; null quando
+  o gateway já não tem) e `sendMedia()` (anexo em base64 para o gateway local).
+- `Enum\MediaKind` (image/video/audio/document) com `fromMimetype()` e
+  `aceitaLegenda()`.
+- `Dto\Webhook\MediaInfo::$available` e `$reason` (`too_large`,
+  `download_failed`): o gateway baixa a mídia antes do webhook.
+- `FakeWhatsappGateway`: `simulateIncomingMedia()`, `getMedia()`, `sendMedia()`.
+
+### Mudou (incompatível para quem implementa a interface)
+- `WhatsappGatewayInterface` ganhou `sendMedia()` e `getMedia()`.
+
 ## [0.2.0] - 2026-10-01
 
 ### Adicionado

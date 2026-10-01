@@ -7,6 +7,8 @@ namespace BetoCampoy\Champs\WhatsappSdk;
 use BetoCampoy\Champs\WhatsappSdk\Contracts\HttpClientAdapterInterface;
 use BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface;
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
+use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
 use BetoCampoy\Champs\WhatsappSdk\Dto\Session;
 use BetoCampoy\Champs\WhatsappSdk\Dto\WebhookTarget;
@@ -145,7 +147,78 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
         return new SendResult($data['waMessageId'], Jid::tryParse($data['jid'] ?? null), $clientMessageId);
     }
 
+    public function sendMedia(
+        string $sessionId,
+        string $to,
+        MediaKind $kind,
+        string $bytes,
+        string $mimetype,
+        ?string $fileName = null,
+        ?string $caption = null,
+        ?string $clientMessageId = null,
+    ): SendResult {
+        if (trim($to) === '') {
+            throw new \InvalidArgumentException('Destinatário vazio.');
+        }
+        if ($bytes === '') {
+            throw new \InvalidArgumentException('Arquivo vazio.');
+        }
+
+        $clientMessageId ??= ClientMessageId::generate();
+
+        $data = $this->json('POST', $this->sessionPath($sessionId) . '/messages', array_filter([
+            'clientMessageId' => $clientMessageId,
+            'to' => $to,
+            'type' => $kind->value,
+            'mediaBase64' => base64_encode($bytes),
+            'mimetype' => $mimetype,
+            'fileName' => $fileName,
+            'caption' => $kind->aceitaLegenda() ? $caption : null,
+        ], static fn ($v) => $v !== null && $v !== ''), sessionRoute: true, notFoundMayBeRecipient: true);
+
+        if (!isset($data['waMessageId']) || !is_string($data['waMessageId'])) {
+            throw new GatewayException('Gateway aceitou o envio mas não devolveu waMessageId.', 502, 'invalid_response');
+        }
+
+        return new SendResult($data['waMessageId'], Jid::tryParse($data['jid'] ?? null), $clientMessageId);
+    }
+
+    public function getMedia(string $sessionId, string $waMessageId): ?MediaFile
+    {
+        if (!preg_match('/^[A-Za-z0-9]{1,64}$/', $waMessageId)) {
+            throw new \InvalidArgumentException(sprintf('waMessageId inválido: "%s".', $waMessageId));
+        }
+
+        $response = $this->send('GET', $this->sessionPath($sessionId) . '/media/' . $waMessageId);
+        if ($response['status'] === 404) {
+            return null; // expirou no gateway, ou nunca foi baixada
+        }
+        $this->throwOnError($response);
+
+        $nome = self::header($response['headers'], 'x-file-name');
+
+        return new MediaFile(
+            $response['body'],
+            self::header($response['headers'], 'content-type') ?? 'application/octet-stream',
+            null === $nome ? null : rawurldecode($nome),
+        );
+    }
+
     // ------------------------------------------------------------------
+
+    /** @param array<string, list<string>|string> $headers */
+    private static function header(array $headers, string $nome): ?string
+    {
+        foreach ($headers as $chave => $valor) {
+            if (strtolower((string) $chave) === $nome) {
+                $valor = is_array($valor) ? ($valor[0] ?? null) : $valor;
+
+                return null === $valor || $valor === '' ? null : (string) $valor;
+            }
+        }
+
+        return null;
+    }
 
     private function sessionPath(string $sessionId): string
     {

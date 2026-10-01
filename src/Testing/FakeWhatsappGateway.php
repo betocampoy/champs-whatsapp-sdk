@@ -6,6 +6,8 @@ namespace BetoCampoy\Champs\WhatsappSdk\Testing;
 
 use BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface;
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
+use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
 use BetoCampoy\Champs\WhatsappSdk\Dto\Session;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SessionOwner;
@@ -43,6 +45,9 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
     public array $sent = [];
 
     private int $messageSeq = 0;
+
+    /** @var array<string, array<string, array{base64: string, mimetype: string, fileName: ?string}>> mídias recebidas simuladas */
+    private array $medias = [];
 
     /**
      * @param int         $connectAfterPolls consultas em `qr` até conectar sozinho (0 = nunca, só via simulateConnected)
@@ -146,7 +151,59 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         return new SendResult($waMessageId, $this->toJid($to), $clientMessageId);
     }
 
+    public function sendMedia(
+        string $sessionId,
+        string $to,
+        MediaKind $kind,
+        string $bytes,
+        string $mimetype,
+        ?string $fileName = null,
+        ?string $caption = null,
+        ?string $clientMessageId = null,
+    ): SendResult {
+        $resultado = $this->sendText($sessionId, $to, $caption ?? '', $clientMessageId);
+        // completa o registro do envio com os dados do anexo (o sendText já gravou o resto)
+        foreach ($this->sent as $i => $item) {
+            if ($item['waMessageId'] === $resultado->waMessageId) {
+                $this->sent[$i] += ['kind' => $kind->value, 'mimetype' => $mimetype, 'fileName' => $fileName, 'size' => strlen($bytes)];
+            }
+        }
+        $this->save();
+
+        return $resultado;
+    }
+
+    public function getMedia(string $sessionId, string $waMessageId): ?MediaFile
+    {
+        $m = $this->medias[$sessionId][$waMessageId] ?? null;
+
+        return null === $m ? null : new MediaFile(base64_decode($m['base64']), $m['mimetype'], $m['fileName']);
+    }
+
     // --- controle do teste -------------------------------------------------
+
+    /**
+     * O cliente mandou um arquivo: guarda no "gateway" (para o getMedia()) e
+     * devolve o webhook com `media.available`.
+     */
+    public function simulateIncomingMedia(
+        string $sessionId,
+        string $phone,
+        string $bytes,
+        string $mimetype,
+        string $messageType = 'imageMessage',
+        ?string $fileName = null,
+        ?string $caption = null,
+    ): SimulatedWebhook {
+        $data = $this->messageData(false, $phone, null, $caption ?? '', 'Cliente Fake', null, null);
+        $data['text'] = $caption;
+        $data['messageType'] = $messageType;
+        $data['hasMedia'] = true;
+        $data['media'] = ['mimetype' => $mimetype, 'size' => strlen($bytes), 'fileName' => $fileName, 'available' => true, 'reason' => null];
+        $this->medias[$sessionId][$data['waMessageId']] = ['base64' => base64_encode($bytes), 'mimetype' => $mimetype, 'fileName' => $fileName];
+
+        return $this->webhook($sessionId, WebhookEventType::MESSAGE_RECEIVED, $data);
+    }
 
     public function simulateConnected(string $sessionId): void
     {
@@ -316,6 +373,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         }
         $this->sent = $data['sent'] ?? [];
         $this->messageSeq = (int) ($data['messageSeq'] ?? 0);
+        $this->medias = $data['medias'] ?? [];
     }
 
     private function save(): void
@@ -344,7 +402,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         }
         file_put_contents(
             $this->stateFile,
-            json_encode(['sessions' => $sessions, 'sent' => $this->sent, 'messageSeq' => $this->messageSeq], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+            json_encode(['sessions' => $sessions, 'sent' => $this->sent, 'messageSeq' => $this->messageSeq, 'medias' => $this->medias], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
             LOCK_EX,
         );
     }
