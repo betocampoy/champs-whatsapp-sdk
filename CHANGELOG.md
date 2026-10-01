@@ -1,6 +1,6 @@
 # Changelog
 
-## [Não publicado]
+## [0.1.0] - 2026-09-30
 
 ### Adicionado
 - `WhatsappGatewayClient` (contrato v1 do `champs-whatsapp-gateway`): `health`,
