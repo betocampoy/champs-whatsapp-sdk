@@ -125,6 +125,45 @@ Observadas no teste real em produção (2026-09-30), fazem parte do contrato:
 4. **Envio é idempotente por `clientMessageId`.** Gere antes de enviar
    (`Support\ClientMessageId::generate()`), guarde, e reenvie com o mesmo id.
 
+## Receber webhooks
+
+O gateway manda os eventos de cada sessão para o `WebhookTarget` informado no
+`startSession()`, assinados com o segredo dele. Na rota da aplicação:
+
+```php
+use BetoCampoy\Champs\WhatsappSdk\Exceptions\InvalidWebhookException;
+use BetoCampoy\Champs\WhatsappSdk\Webhook\WebhookEvent;
+use BetoCampoy\Champs\WhatsappSdk\Webhook\WebhookVerifier;
+
+$body = $request->getContent();                 // corpo BRUTO, nunca re-serializado
+try {
+    (new WebhookVerifier())->verify(
+        $body,
+        $request->headers->get(WebhookVerifier::HEADER_TIMESTAMP),
+        $request->headers->get(WebhookVerifier::HEADER_SIGNATURE),
+        $secretDaSessao,                        // o mesmo do WebhookTarget
+    );
+    $event = WebhookEvent::fromJson($body);
+} catch (InvalidWebhookException) {
+    return new Response('', 401);
+}
+// grave $event->eventId (único) e responda 200 JÁ; processe depois (fila)
+```
+
+No processamento:
+
+| `$event->type` (`WebhookEventType`) | Acessor | O quê |
+|---|---|---|
+| `MESSAGE_RECEIVED` / `MESSAGE_SENT_FROM_DEVICE` | `message()` → `IncomingMessage` | `contact` (`ContactIdentity`: `lid`, `phone`, um dos dois pode ser null), `text`, `sentAt` (hora do WhatsApp), `media` |
+| `MESSAGE_STATUS` | `messageStatus()` → `MessageStatusUpdate` | ack: case por `waMessageId`, grave só se `shouldReplace()` |
+| `CONTACT_IDENTITY` | `contactIdentity()` | par LID ↔ telefone descoberto depois: una os contatos |
+| `SESSION_STATUS` | `sessionStatus()` → `SessionStatusChange` | conectou, caiu, deslogado pelo celular |
+| `null` | — | tipo novo que este SDK não conhece: ignore e responda 2xx |
+
+Regras do envelope: `eventId` repetido = já processado (o gateway reenvia
+quando não recebe 2xx); responda **2xx** também para repetido e para tipo
+desconhecido. Um `4xx` faz o gateway desistir do evento.
+
 ## Testes na aplicação: `FakeWhatsappGateway`
 
 Gateway falso em memória, para desenvolvimento local e testes da aplicação
@@ -141,6 +180,17 @@ $fake->sent;                        // envios registrados
 
 // no navegador (dev local), para o estado sobreviver entre requisições HTTP:
 $fake = new FakeWhatsappGateway(stateFile: __DIR__ . "/var/whatsapp-fake-gateway.json");
+
+// webhooks exatamente como o gateway mandaria (corpo + headers assinados).
+// O fake não faz HTTP: o teste envia para a rota da aplicação.
+$fake->startSession('s1', new WebhookTarget('https://app.test/hook/s1', $segredo));
+$hook = $fake->simulateIncomingMessage('s1', '5516900001111', 'quero rastrear');
+$hook = $fake->simulateIncomingMessage('s1', null, 'oi', lid: '999@lid');   // contato só com LID
+$fake->simulateAck('s1', $waMessageId, AckStatus::READ);
+$fake->simulateContactIdentity('s1', '999@lid', '5516900001111');
+$fake->simulateSentFromDevice('s1', '5516900001111', 'respondi pelo celular');
+$fake->simulateSessionStatus('s1', SessionStatus::LOGGED_OUT);
+$client->request('POST', $hook->url, server: $hook->serverHeaders(), content: $hook->rawBody);  // Symfony KernelBrowser
 ```
 
 Para ver o fluxo **real** (QR de verdade com um número de teste), suba o
@@ -153,12 +203,10 @@ gateway localmente (Node >= 20) e aponte o `baseUrl` para ele.
 
 ## Roadmap
 
-- **Etapa atual (0.1):** sessões, QR, status, envio de texto, regras de
-  protocolo (`Jid`, `AckStatus`, `ClientMessageId`), fake.
-- **Próxima (webhooks):** `Webhook\WebhookVerifier` (HMAC + janela de 5 min),
-  `Webhook\WebhookParser` → eventos tipados (`MessageReceivedEvent`,
-  `MessageStatusEvent`, ...), `Contracts\WebhookSecretResolverInterface`,
-  `Bridge\Symfony\WhatsappWebhookRequest`, `Testing\WebhookFactory`.
+- **0.1:** sessões, QR, status, envio de texto, regras de protocolo (`Jid`,
+  `AckStatus`, `ClientMessageId`), fake.
+- **0.2:** webhooks: `Webhook\WebhookVerifier`, `Webhook\WebhookEvent` com DTOs
+  tipados, webhooks simulados no fake.
 - Depois: mídia, marcar como lido, presença, foto de perfil.
 
 ## Desenvolvimento

@@ -10,11 +10,14 @@ use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
 use BetoCampoy\Champs\WhatsappSdk\Dto\Session;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SessionOwner;
 use BetoCampoy\Champs\WhatsappSdk\Dto\WebhookTarget;
+use BetoCampoy\Champs\WhatsappSdk\Enum\AckStatus;
 use BetoCampoy\Champs\WhatsappSdk\Enum\SessionStatus;
 use BetoCampoy\Champs\WhatsappSdk\Exceptions\GatewayException;
 use BetoCampoy\Champs\WhatsappSdk\Exceptions\SessionNotFoundException;
 use BetoCampoy\Champs\WhatsappSdk\Support\ClientMessageId;
 use BetoCampoy\Champs\WhatsappSdk\Support\Jid;
+use BetoCampoy\Champs\WhatsappSdk\Webhook\WebhookEventType;
+use BetoCampoy\Champs\WhatsappSdk\Webhook\WebhookVerifier;
 use BetoCampoy\Champs\WhatsappSdk\WhatsappGatewayClient;
 
 /**
@@ -165,6 +168,106 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
     public function webhookOf(string $sessionId): ?WebhookTarget
     {
         return $this->sessions[$sessionId]['webhook'] ?? null;
+    }
+
+    // --- webhooks simulados (o fake não faz HTTP: devolve o que o gateway mandaria) ---
+
+    /**
+     * O cliente mandou uma mensagem. `$lid` informado sem `$phone` (null)
+     * simula o contato que chega só com LID (contrato v1 §5 regra 1).
+     */
+    public function simulateIncomingMessage(
+        string $sessionId,
+        ?string $phone,
+        string $text,
+        ?string $pushName = 'Cliente Fake',
+        ?string $lid = null,
+        ?\DateTimeImmutable $at = null,
+        ?string $waMessageId = null,
+    ): SimulatedWebhook {
+        return $this->webhook($sessionId, WebhookEventType::MESSAGE_RECEIVED, $this->messageData(false, $phone, $lid, $text, $pushName, $at, $waMessageId));
+    }
+
+    /** Alguém respondeu pelo celular, fora da aplicação. */
+    public function simulateSentFromDevice(string $sessionId, ?string $phone, string $text, ?string $lid = null, ?\DateTimeImmutable $at = null): SimulatedWebhook
+    {
+        return $this->webhook($sessionId, WebhookEventType::MESSAGE_SENT_FROM_DEVICE, $this->messageData(true, $phone, $lid, $text, null, $at, null));
+    }
+
+    /** Ack de uma mensagem enviada. Como no real, volta com o LID, não com o telefone. */
+    public function simulateAck(string $sessionId, string $waMessageId, AckStatus $status): SimulatedWebhook
+    {
+        return $this->webhook($sessionId, WebhookEventType::MESSAGE_STATUS, [
+            'waMessageId' => $waMessageId,
+            'jid' => '170712199389204:46@lid',
+            'status' => $status->value,
+        ]);
+    }
+
+    public function simulateContactIdentity(string $sessionId, string $lid, string $phone): SimulatedWebhook
+    {
+        return $this->webhook($sessionId, WebhookEventType::CONTACT_IDENTITY, ['lid' => $lid, 'phone' => $phone]);
+    }
+
+    public function simulateSessionStatus(string $sessionId, SessionStatus $status): SimulatedWebhook
+    {
+        $owner = $status === SessionStatus::CONNECTED ? $this->fakeOwner() : null;
+
+        return $this->webhook($sessionId, WebhookEventType::SESSION_STATUS, array_filter([
+            'status' => $status->value,
+            'me' => $owner === null ? null : ['id' => (string) $owner->jid, 'lid' => $owner->lid?->bare(), 'name' => $owner->name],
+        ], static fn ($v) => $v !== null));
+    }
+
+    /** @return array<string, mixed> */
+    private function messageData(bool $fromMe, ?string $phone, ?string $lid, string $text, ?string $pushName, ?\DateTimeImmutable $at, ?string $waMessageId): array
+    {
+        if ($phone === null && $lid === null) {
+            throw new \InvalidArgumentException('Informe o telefone, o LID ou os dois.');
+        }
+        $digits = $phone === null ? null : preg_replace('/\D+/', '', $phone);
+
+        return [
+            'waMessageId' => $waMessageId ?? sprintf('FAKEIN%012d', ++$this->messageSeq),
+            'fromMe' => $fromMe,
+            'contact' => [
+                'jid' => $lid ?? $digits . '@s.whatsapp.net',
+                'lid' => $lid,
+                'phone' => $digits,
+            ],
+            'pushName' => $fromMe ? null : $pushName,
+            'timestamp' => ($at ?? new \DateTimeImmutable())->getTimestamp(),
+            'messageType' => 'conversation',
+            'text' => $text,
+            'hasMedia' => false,
+            'media' => null,
+        ];
+    }
+
+    /** @param array<string, mixed> $data */
+    private function webhook(string $sessionId, WebhookEventType $type, array $data): SimulatedWebhook
+    {
+        $this->require($sessionId);
+        $target = $this->sessions[$sessionId]['webhook'];
+        if ($target === null) {
+            throw new \LogicException(sprintf('Sessão "%s" sem webhook: chame startSession() com um WebhookTarget.', $sessionId));
+        }
+        $this->save();
+
+        $body = (string) json_encode([
+            'eventId' => ClientMessageId::generate(),
+            'sessionId' => $sessionId,
+            'type' => $type->value,
+            'occurredAt' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
+            'data' => $data,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $timestamp = (string) time();
+
+        return new SimulatedWebhook($target->url, $body, [
+            'Content-Type' => 'application/json',
+            WebhookVerifier::HEADER_TIMESTAMP => $timestamp,
+            WebhookVerifier::HEADER_SIGNATURE => WebhookVerifier::sign($body, $timestamp, $target->secret),
+        ]);
     }
 
     // ------------------------------------------------------------------------

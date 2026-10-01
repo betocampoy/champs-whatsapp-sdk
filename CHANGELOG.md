@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0] - 2026-10-01
+
+### Adicionado
+- Webhooks (contrato v1 §4): `Webhook\WebhookVerifier` (HMAC-SHA256 +
+  janela de 5 min, `hash_equals`), `Webhook\WebhookEvent` (envelope; tipo
+  desconhecido não é erro) e `Webhook\WebhookEventType`.
+- DTOs `Dto\Webhook\IncomingMessage`, `ContactIdentity` (LID sem sufixo de
+  aparelho, telefone só dígitos), `MediaInfo`, `MessageStatusUpdate`,
+  `SessionStatusChange`.
+- `Exceptions\InvalidWebhookException`.
+- `FakeWhatsappGateway`: `simulateIncomingMessage()`, `simulateSentFromDevice()`,
+  `simulateAck()`, `simulateContactIdentity()`, `simulateSessionStatus()`,
+  devolvendo `Testing\SimulatedWebhook` (corpo + headers assinados).
+- `GatewayHealth::$pendingWebhooks`.
+
 ## [0.1.0] - 2026-09-30
 
 ### Adicionado

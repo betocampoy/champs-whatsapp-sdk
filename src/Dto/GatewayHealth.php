@@ -12,6 +12,8 @@ final class GatewayHealth
         public readonly ?string $apiVersion,
         public readonly int $sessions,
         public readonly int $connected,
+        /** Webhooks esperando entrega (null = gateway anterior ao campo). */
+        public readonly ?int $pendingWebhooks = null,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -22,6 +24,7 @@ final class GatewayHealth
             apiVersion: isset($data['apiVersion']) ? (string) $data['apiVersion'] : null,
             sessions: (int) ($data['sessions'] ?? 0),
             connected: (int) ($data['connected'] ?? 0),
+            pendingWebhooks: isset($data['pendingWebhooks']) ? (int) $data['pendingWebhooks'] : null,
         );
     }
 }
