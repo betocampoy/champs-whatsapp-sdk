@@ -113,6 +113,21 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
         return $response['body'];
     }
 
+    public function requestPairingCode(string $sessionId, string $phone): string
+    {
+        $digitos = preg_replace('/\D+/', '', $phone) ?? '';
+        if (!preg_match('/^\d{10,15}$/', $digitos)) {
+            throw new \InvalidArgumentException('Telefone da conta inválido: informe DDI + DDD + número.');
+        }
+
+        $data = $this->json('POST', $this->sessionPath($sessionId) . '/pairing-code', ['phone' => $digitos], sessionRoute: true);
+        if (!isset($data['code']) || !is_string($data['code']) || '' === $data['code']) {
+            throw new GatewayException('Gateway não devolveu o código de pareamento.', 502, 'invalid_response');
+        }
+
+        return $data['code'];
+    }
+
     public function logout(string $sessionId): void
     {
         $this->json('POST', $this->sessionPath($sessionId) . '/logout', [], sessionRoute: true);

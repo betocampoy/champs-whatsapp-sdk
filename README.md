@@ -212,6 +212,7 @@ gateway localmente (Node >= 20) e aponte o `baseUrl` para ele.
 - **0.4:** responder citando: `Dto\QuotedMessage` no último parâmetro de
   `sendText()`/`sendMedia()`; `IncomingMessage::$quotedWaMessageId` quando o
   cliente responde citando uma mensagem.
+- **0.5:** `requestPairingCode()`: conectar por código de 8 caracteres em vez do QR.
 - Depois: marcar como lido, presença, foto de perfil.
 
 ## Desenvolvimento

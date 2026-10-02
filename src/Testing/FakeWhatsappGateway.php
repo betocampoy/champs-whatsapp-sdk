@@ -115,6 +115,20 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
             : null;
     }
 
+    /** Código fixo `FAKE1234`: o fake só confere o estado (aguardando pareamento) e o telefone. */
+    public function requestPairingCode(string $sessionId, string $phone): string
+    {
+        $this->require($sessionId);
+        if (!preg_match('/^\d{10,15}$/', preg_replace('/\D+/', '', $phone) ?? '')) {
+            throw new \InvalidArgumentException('Telefone da conta inválido: informe DDI + DDD + número.');
+        }
+        if ($this->sessions[$sessionId]['status'] !== SessionStatus::QR) {
+            throw new GatewayException('não dá para gerar código de pareamento (fake)', 409, 'pairing_unavailable');
+        }
+
+        return 'FAKE1234';
+    }
+
     public function logout(string $sessionId): void
     {
         $this->require($sessionId);

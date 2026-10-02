@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0] - 2026-10-02
+
+### Adicionado
+- `requestPairingCode($sessionId, $phone)`: pareamento por código de 8
+  caracteres, alternativa ao QR (aparelho principal → Dispositivos
+  conectados → "Conectar com número de telefone"). Envia só os dígitos;
+  `409 pairing_unavailable` vira `GatewayException` com esse `code`.
+- `FakeWhatsappGateway::requestPairingCode()` devolve `FAKE1234` enquanto a
+  sessão aguarda pareamento.
+
+### Mudou (incompatível para quem implementa a interface)
+- `WhatsappGatewayInterface` ganhou `requestPairingCode()`.
+
 ## [0.4.0] - 2026-10-01
 
 ### Adicionado

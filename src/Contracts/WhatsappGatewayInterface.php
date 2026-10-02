@@ -49,6 +49,17 @@ interface WhatsappGatewayInterface
     public function getQrPng(string $sessionId): ?string;
 
     /**
+     * Alternativa ao QR: código de 8 caracteres para digitar no aparelho
+     * principal (Dispositivos conectados → Conectar dispositivo → "Conectar
+     * com número de telefone"). `$phone` = número da conta, com DDI (só os
+     * dígitos importam). A sessão precisa estar aguardando pareamento.
+     *
+     * @throws SessionNotFoundException
+     * @throws GatewayException 409 `pairing_unavailable` se já conectada ou fora do momento de parear
+     */
+    public function requestPairingCode(string $sessionId, string $phone): string;
+
+    /**
      * Desconecta o aparelho e apaga as credenciais no gateway. Para voltar,
      * só com QR novo.
      */
