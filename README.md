@@ -213,6 +213,7 @@ gateway localmente (Node >= 20) e aponte o `baseUrl` para ele.
   `sendText()`/`sendMedia()`; `IncomingMessage::$quotedWaMessageId` quando o
   cliente responde citando uma mensagem.
 - **0.5:** `requestPairingCode()`: conectar por código de 8 caracteres em vez do QR.
+- **0.6:** `checkNumber()`: o número tem WhatsApp? (antes de abrir conversa nova).
 - Depois: marcar como lido, presença, foto de perfil.
 
 ## Desenvolvimento

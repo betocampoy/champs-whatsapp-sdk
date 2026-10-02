@@ -8,6 +8,7 @@ use BetoCampoy\Champs\WhatsappSdk\Contracts\HttpClientAdapterInterface;
 use BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface;
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
 use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Dto\NumberCheck;
 use BetoCampoy\Champs\WhatsappSdk\Dto\QuotedMessage;
 use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
@@ -126,6 +127,16 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
         }
 
         return $data['code'];
+    }
+
+    public function checkNumber(string $sessionId, string $phone): NumberCheck
+    {
+        $digitos = preg_replace('/\D+/', '', $phone) ?? '';
+        if (!preg_match('/^\d{10,15}$/', $digitos)) {
+            throw new \InvalidArgumentException('Telefone inválido: informe DDI + DDD + número.');
+        }
+
+        return NumberCheck::fromArray($this->json('GET', $this->sessionPath($sessionId) . '/contacts/' . $digitos . '/exists', sessionRoute: true));
     }
 
     public function logout(string $sessionId): void

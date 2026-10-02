@@ -7,6 +7,7 @@ namespace BetoCampoy\Champs\WhatsappSdk\Testing;
 use BetoCampoy\Champs\WhatsappSdk\Contracts\WhatsappGatewayInterface;
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
 use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Dto\NumberCheck;
 use BetoCampoy\Champs\WhatsappSdk\Dto\QuotedMessage;
 use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
@@ -46,6 +47,9 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
     public array $sent = [];
 
     private int $messageSeq = 0;
+
+    /** @var list<string> números sem WhatsApp ({@see self::simulateNoWhatsapp()}) */
+    private array $semWhatsapp = [];
 
     /** @var array<string, array<string, array{base64: string, mimetype: string, fileName: ?string}>> mídias recebidas simuladas */
     private array $medias = [];
@@ -113,6 +117,27 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         return $this->sessions[$sessionId]['status'] === SessionStatus::QR
             ? base64_decode(self::FAKE_QR_PNG_BASE64)
             : null;
+    }
+
+    /** Todo número tem WhatsApp, menos os marcados com {@see self::simulateNoWhatsapp()}. */
+    public function checkNumber(string $sessionId, string $phone): NumberCheck
+    {
+        $this->require($sessionId);
+        if ($this->sessions[$sessionId]['status'] !== SessionStatus::CONNECTED) {
+            throw new GatewayException('sessão não conectada (fake)', 409, 'session_not_connected');
+        }
+        $digitos = preg_replace('/\D+/', '', $phone) ?? '';
+        if (in_array($digitos, $this->semWhatsapp, true)) {
+            return new NumberCheck(false);
+        }
+
+        return new NumberCheck(true, $digitos . '@s.whatsapp.net', $digitos);
+    }
+
+    /** Faz {@see self::checkNumber()} dizer que este número não tem WhatsApp. */
+    public function simulateNoWhatsapp(string $phone): void
+    {
+        $this->semWhatsapp[] = preg_replace('/\D+/', '', $phone) ?? '';
     }
 
     /** Código fixo `FAKE1234`: o fake só confere o estado (aguardando pareamento) e o telefone. */

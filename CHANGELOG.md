@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0] - 2026-10-02
+
+### Adicionado
+- `checkNumber($sessionId, $phone)` → `Dto\NumberCheck` (`exists`, `jid`,
+  `phone` canônico — o gateway resolve o nono dígito): "o número tem
+  WhatsApp?" sem enviar nada, para abrir conversa nova.
+- `FakeWhatsappGateway::checkNumber()` (todo número existe) e
+  `simulateNoWhatsapp($phone)`.
+
+### Mudou (incompatível para quem implementa a interface)
+- `WhatsappGatewayInterface` ganhou `checkNumber()`.
+
 ## [0.5.0] - 2026-10-02
 
 ### Adicionado

@@ -6,6 +6,7 @@ namespace BetoCampoy\Champs\WhatsappSdk\Contracts;
 
 use BetoCampoy\Champs\WhatsappSdk\Dto\GatewayHealth;
 use BetoCampoy\Champs\WhatsappSdk\Dto\MediaFile;
+use BetoCampoy\Champs\WhatsappSdk\Dto\NumberCheck;
 use BetoCampoy\Champs\WhatsappSdk\Dto\QuotedMessage;
 use BetoCampoy\Champs\WhatsappSdk\Enum\MediaKind;
 use BetoCampoy\Champs\WhatsappSdk\Dto\SendResult;
@@ -58,6 +59,15 @@ interface WhatsappGatewayInterface
      * @throws GatewayException 409 `pairing_unavailable` se já conectada ou fora do momento de parear
      */
     public function requestPairingCode(string $sessionId, string $phone): string;
+
+    /**
+     * O número tem WhatsApp? (sem enviar nada). Use antes de abrir conversa
+     * nova; `NumberCheck::$phone` traz o número como o WhatsApp o conhece.
+     *
+     * @throws SessionNotFoundException
+     * @throws GatewayException 409 se a sessão não está conectada
+     */
+    public function checkNumber(string $sessionId, string $phone): NumberCheck;
 
     /**
      * Desconecta o aparelho e apaga as credenciais no gateway. Para voltar,
