@@ -40,7 +40,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
     /** PNG 1×1 transparente — o suficiente para uma tag <img> renderizar. */
     public const FAKE_QR_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
-    /** @var array<string, array{status: SessionStatus, polls: int, owner: ?SessionOwner, webhook: ?WebhookTarget}> */
+    /** @var array<string, array{status: SessionStatus, polls: int, owner: ?SessionOwner, webhook: ?WebhookTarget, monitorGroups: bool}> */
     private array $sessions = [];
 
     /** @var list<array{sessionId: string, to: string, text: string, clientMessageId: string, waMessageId: string}> */
@@ -77,10 +77,16 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         return new GatewayHealth(true, WhatsappGatewayClient::API_VERSION, count($this->sessions), $connected);
     }
 
-    public function startSession(string $sessionId, ?WebhookTarget $webhook = null): Session
+    public function startSession(string $sessionId, ?WebhookTarget $webhook = null, ?bool $monitorGroups = null): Session
     {
         $current = $this->sessions[$sessionId] ?? null;
         if ($current !== null && !in_array($current['status'], [SessionStatus::STOPPED, SessionStatus::LOGGED_OUT], true)) {
+            // como no gateway real: sessão ativa só troca as opções que vieram
+            if ($monitorGroups !== null) {
+                $this->sessions[$sessionId]['monitorGroups'] = $monitorGroups;
+                $this->save();
+            }
+
             return $this->toSession($sessionId);
         }
 
@@ -92,6 +98,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
             'polls' => 0,
             'owner' => $resume ? $current['owner'] : null,
             'webhook' => $webhook ?? $current['webhook'] ?? null,
+            'monitorGroups' => $monitorGroups ?? $current['monitorGroups'] ?? false,
         ];
         $this->save();
 
@@ -175,6 +182,10 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
             throw new GatewayException('sessão não conectada (fake)', 409, 'session_not_connected');
         }
 
+        if (str_ends_with($to, '@g.us') && !$this->sessions[$sessionId]['monitorGroups']) {
+            throw new GatewayException('envio para grupo exige monitorGroups na sessão (fake)', 400, 'invalid_request');
+        }
+
         $clientMessageId ??= ClientMessageId::generate();
 
         // idempotente, como o contrato exige
@@ -186,7 +197,8 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
 
         $waMessageId = sprintf('FAKE%012d', ++$this->messageSeq);
         $quotedWaMessageId = $quoted?->waMessageId;
-        $this->sent[] = compact('sessionId', 'to', 'text', 'clientMessageId', 'waMessageId', 'quotedWaMessageId');
+        $quotedParticipant = $quoted?->participant;
+        $this->sent[] = compact('sessionId', 'to', 'text', 'clientMessageId', 'waMessageId', 'quotedWaMessageId', 'quotedParticipant');
         $this->save();
 
         return new SendResult($waMessageId, $this->toJid($to), $clientMessageId);
@@ -287,6 +299,12 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         return $this->sessions[$sessionId]['webhook'] ?? null;
     }
 
+    /** O que a aplicação pediu no último startSession() (false se nunca pediu). */
+    public function monitorGroupsOf(string $sessionId): bool
+    {
+        return $this->sessions[$sessionId]['monitorGroups'] ?? false;
+    }
+
     // --- webhooks simulados (o fake não faz HTTP: devolve o que o gateway mandaria) ---
 
     /**
@@ -307,6 +325,37 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         $data['quotedWaMessageId'] = $quotedWaMessageId;
 
         return $this->webhook($sessionId, WebhookEventType::MESSAGE_RECEIVED, $data);
+    }
+
+    /**
+     * Mensagem num grupo em que o número está: `group` preenchido e `contact`
+     * = quem mandou (`$phone`/`$lid`). Com `$fromMe`, o próprio número mandou
+     * pelo celular (o contato vira o dono da sessão). O fake gera o webhook
+     * mesmo sem `monitorGroups` (o real não geraria): serve para testar a
+     * defesa da aplicação.
+     */
+    public function simulateIncomingGroupMessage(
+        string $sessionId,
+        string $groupJid,
+        ?string $subject,
+        ?string $phone,
+        string $text,
+        ?string $pushName = 'Participante Fake',
+        ?string $lid = null,
+        bool $fromMe = false,
+        ?string $waMessageId = null,
+        ?string $quotedWaMessageId = null,
+    ): SimulatedWebhook {
+        if ($fromMe) {
+            $owner = $this->sessions[$sessionId]['owner'] ?? $this->fakeOwner();
+            $phone = $owner->jid->phone();
+            $lid = $owner->lid?->bare();
+        }
+        $data = $this->messageData($fromMe, $phone, $lid, $text, $pushName, null, $waMessageId);
+        $data['group'] = ['jid' => $groupJid, 'subject' => $subject];
+        $data['quotedWaMessageId'] = $quotedWaMessageId;
+
+        return $this->webhook($sessionId, $fromMe ? WebhookEventType::MESSAGE_SENT_FROM_DEVICE : WebhookEventType::MESSAGE_RECEIVED, $data);
     }
 
     /** Alguém respondeu pelo celular, fora da aplicação. */
@@ -363,6 +412,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
             'hasMedia' => false,
             'media' => null,
             'location' => null,
+            'group' => null,
         ];
     }
 
@@ -434,6 +484,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
                 'polls' => (int) ($s['polls'] ?? 0),
                 'owner' => $owner,
                 'webhook' => $webhook,
+                'monitorGroups' => (bool) ($s['monitorGroups'] ?? false),
             ];
         }
         $this->sent = $data['sent'] ?? [];
@@ -458,6 +509,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
                     'name' => $s['owner']->name,
                 ],
                 'webhook' => $s['webhook'] === null ? null : ['url' => $s['webhook']->url, 'secret' => $s['webhook']->secret],
+                'monitorGroups' => $s['monitorGroups'],
             ];
         }
 
@@ -483,7 +535,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
     {
         $s = $this->sessions[$sessionId];
 
-        return new Session($sessionId, $s['status'], $s['owner'], $s['status'] === SessionStatus::QR, null);
+        return new Session($sessionId, $s['status'], $s['owner'], $s['status'] === SessionStatus::QR, null, $s['monitorGroups']);
     }
 
     private function fakeOwner(): SessionOwner

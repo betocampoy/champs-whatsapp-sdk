@@ -32,9 +32,14 @@ interface WhatsappGatewayInterface
 
     /**
      * Cria/inicia a sessão (idempotente: sessão já ativa devolve o estado atual).
-     * Depois disso a sessão fica em `qr` até alguém escanear.
+     * Depois disso a sessão fica em `qr` até alguém escanear. Também serve
+     * para trocar webhook/opções de uma sessão ativa, sem mexer no aparelho.
+     *
+     * `$monitorGroups`: mensagens de grupo geram webhook (com `group`) e o
+     * envio para grupo (`…@g.us`) é aceito. Null = não informa (o gateway
+     * mantém o que a sessão já tem; padrão desligado).
      */
-    public function startSession(string $sessionId, ?WebhookTarget $webhook = null): Session;
+    public function startSession(string $sessionId, ?WebhookTarget $webhook = null, ?bool $monitorGroups = null): Session;
 
     /** @throws SessionNotFoundException */
     public function getSession(string $sessionId): Session;
@@ -79,7 +84,8 @@ interface WhatsappGatewayInterface
     public function stopSession(string $sessionId): void;
 
     /**
-     * Envia texto. `$to`: dígitos (55DDNUMERO), JID de telefone ou LID.
+     * Envia texto. `$to`: dígitos (55DDNUMERO), JID de telefone, LID ou
+     * grupo (`…@g.us`, só com `monitorGroups` na sessão — senão 400).
      * `$clientMessageId` omitido = gerado aqui; guarde o do resultado para
      * reenviar com segurança (idempotente).
      *

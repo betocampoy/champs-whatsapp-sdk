@@ -80,9 +80,12 @@ final class WhatsappGatewayClient implements WhatsappGatewayInterface
         return GatewayHealth::fromArray($this->json('GET', '/health'));
     }
 
-    public function startSession(string $sessionId, ?WebhookTarget $webhook = null): Session
+    public function startSession(string $sessionId, ?WebhookTarget $webhook = null, ?bool $monitorGroups = null): Session
     {
         $body = $webhook === null ? [] : ['webhookUrl' => $webhook->url, 'webhookSecret' => $webhook->secret];
+        if ($monitorGroups !== null) {
+            $body['monitorGroups'] = $monitorGroups;
+        }
 
         return Session::fromArray($this->json('POST', $this->sessionPath($sessionId), $body));
     }

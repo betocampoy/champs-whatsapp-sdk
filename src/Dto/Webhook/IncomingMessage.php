@@ -7,7 +7,8 @@ namespace BetoCampoy\Champs\WhatsappSdk\Dto\Webhook;
 /**
  * `Message` do contrato v1 §4: em `message.received` (o cliente mandou) e em
  * `message.sent_from_device` (`fromMe = true`: alguém respondeu pelo celular,
- * fora da aplicação). `contact` é sempre o outro lado.
+ * fora da aplicação). `contact` é sempre o outro lado; em grupo (`group`
+ * preenchido, só com `monitorGroups` na sessão) é quem mandou.
  *
  * `text` é dado pessoal: nunca logar.
  */
@@ -28,7 +29,14 @@ final class IncomingMessage
         public readonly ?string $quotedWaMessageId = null,
         /** Só em `locationMessage`/`liveLocationMessage`. */
         public readonly ?LocationInfo $location = null,
+        /** Mensagem de grupo: o grupo (o chat). Null em conversa 1:1. */
+        public readonly ?GroupRef $group = null,
     ) {}
+
+    public function isGroup(): bool
+    {
+        return $this->group !== null;
+    }
 
     /** @param array<string, mixed> $data */
     public static function fromArray(array $data): self
@@ -56,6 +64,7 @@ final class IncomingMessage
             media: is_array($data['media'] ?? null) ? MediaInfo::fromArray($data['media']) : null,
             quotedWaMessageId: isset($data['quotedWaMessageId']) && '' !== $data['quotedWaMessageId'] ? (string) $data['quotedWaMessageId'] : null,
             location: is_array($data['location'] ?? null) ? LocationInfo::fromArray($data['location']) : null,
+            group: is_array($data['group'] ?? null) ? GroupRef::fromArray($data['group']) : null,
         );
     }
 }

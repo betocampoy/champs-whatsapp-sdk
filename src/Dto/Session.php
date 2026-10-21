@@ -15,6 +15,8 @@ final class Session
         public readonly ?SessionOwner $owner = null,
         public readonly bool $hasQr = false,
         public readonly ?string $lastError = null,
+        /** Efetivo: false se a sessão não pediu ou o gateway tem a trava global. Gateway antigo = false. */
+        public readonly bool $monitorGroups = false,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -26,6 +28,7 @@ final class Session
             owner: is_array($data['me'] ?? null) ? SessionOwner::fromArray($data['me']) : null,
             hasQr: (bool) ($data['hasQr'] ?? false),
             lastError: isset($data['lastError']) ? (string) $data['lastError'] : null,
+            monitorGroups: (bool) ($data['monitorGroups'] ?? false),
         );
     }
 }

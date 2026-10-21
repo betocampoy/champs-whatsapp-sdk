@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0] - 2026-10-21
+
+### Adicionado
+- Monitoramento de grupos por sessão: `startSession($id, $webhook, $monitorGroups)`
+  (null = não informa; o gateway mantém o que a sessão tem, padrão desligado).
+  Também troca a opção de uma sessão ativa sem mexer no aparelho.
+- `Session::$monitorGroups` (efetivo no gateway; gateway antigo = false).
+- `IncomingMessage::$group` (`Dto\Webhook\GroupRef`: `jid`, `subject`) e
+  `isGroup()`. Em grupo, `contact` é quem mandou.
+- `QuotedMessage::$participant`: autor da citada, necessário para citar em grupo.
+- `FakeWhatsappGateway::simulateIncomingGroupMessage()`, `monitorGroupsOf()`;
+  o fake recusa envio para `…@g.us` sem `monitorGroups` (400 `invalid_request`).
+
+### Mudou (incompatível para quem implementa a interface)
+- `WhatsappGatewayInterface::startSession()` ganhou `?bool $monitorGroups = null`.
+
 ## [0.7.0] - 2026-10-21
 
 ### Adicionado
