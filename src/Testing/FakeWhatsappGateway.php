@@ -247,6 +247,24 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
         return $this->webhook($sessionId, WebhookEventType::MESSAGE_RECEIVED, $data);
     }
 
+    /** O cliente mandou uma localização (fixa, ou em tempo real com `$live`). */
+    public function simulateIncomingLocation(
+        string $sessionId,
+        string $phone,
+        float $latitude,
+        float $longitude,
+        ?string $name = null,
+        ?string $address = null,
+        bool $live = false,
+    ): SimulatedWebhook {
+        $data = $this->messageData(false, $phone, null, '', 'Cliente Fake', null, null);
+        $data['text'] = null;
+        $data['messageType'] = $live ? 'liveLocationMessage' : 'locationMessage';
+        $data['location'] = ['latitude' => $latitude, 'longitude' => $longitude, 'name' => $name, 'address' => $address, 'live' => $live];
+
+        return $this->webhook($sessionId, WebhookEventType::MESSAGE_RECEIVED, $data);
+    }
+
     public function simulateConnected(string $sessionId): void
     {
         $this->require($sessionId);
@@ -344,6 +362,7 @@ final class FakeWhatsappGateway implements WhatsappGatewayInterface
             'text' => $text,
             'hasMedia' => false,
             'media' => null,
+            'location' => null,
         ];
     }
 

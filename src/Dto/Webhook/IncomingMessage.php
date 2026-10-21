@@ -26,6 +26,8 @@ final class IncomingMessage
         public readonly ?MediaInfo $media,
         /** Respondeu citando esta mensagem (id do WhatsApp), ou null. */
         public readonly ?string $quotedWaMessageId = null,
+        /** Só em `locationMessage`/`liveLocationMessage`. */
+        public readonly ?LocationInfo $location = null,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -53,6 +55,7 @@ final class IncomingMessage
             hasMedia: (bool) ($data['hasMedia'] ?? false),
             media: is_array($data['media'] ?? null) ? MediaInfo::fromArray($data['media']) : null,
             quotedWaMessageId: isset($data['quotedWaMessageId']) && '' !== $data['quotedWaMessageId'] ? (string) $data['quotedWaMessageId'] : null,
+            location: is_array($data['location'] ?? null) ? LocationInfo::fromArray($data['location']) : null,
         );
     }
 }

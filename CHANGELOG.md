@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.0] - 2026-10-21
+
+### Adicionado
+- `IncomingMessage::$location` (`Dto\Webhook\LocationInfo`: `latitude`,
+  `longitude`, `name`, `address`, `live`) em `locationMessage` e
+  `liveLocationMessage`. Null nos outros tipos, com coordenada inválida ou
+  com gateway anterior ao campo.
+- `FakeWhatsappGateway::simulateIncomingLocation()`.
+
 ## [0.6.0] - 2026-10-02
 
 ### Adicionado

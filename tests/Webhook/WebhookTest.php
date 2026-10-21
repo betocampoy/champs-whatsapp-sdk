@@ -103,6 +103,44 @@ final class WebhookTest extends TestCase
         self::assertSame('oi', $msg->text);
     }
 
+    public function testMensagemComLocalizacao(): void
+    {
+        $base = [
+            'waMessageId' => '3EB0LOC', 'fromMe' => false, 'contact' => ['jid' => '5516997038763@s.whatsapp.net', 'phone' => '5516997038763'],
+            'timestamp' => 1790791732, 'messageType' => 'locationMessage', 'text' => null, 'hasMedia' => false, 'media' => null,
+        ];
+
+        $msg = WebhookEvent::fromArray(['eventId' => 'e1', 'sessionId' => 's1', 'type' => 'message.received', 'data' => $base + [
+            'location' => ['latitude' => -21.1767, 'longitude' => -47.8208, 'name' => 'Padaria', 'address' => '', 'live' => false],
+        ]])->message();
+        self::assertSame(-21.1767, $msg?->location?->latitude);
+        self::assertSame(-47.8208, $msg?->location?->longitude);
+        self::assertSame('Padaria', $msg?->location?->name);
+        self::assertNull($msg?->location?->address, 'texto vazio vira null');
+        self::assertFalse($msg?->location?->live);
+
+        $semLocalizacao = WebhookEvent::fromArray(['eventId' => 'e2', 'sessionId' => 's1', 'type' => 'message.received', 'data' => $base])->message();
+        self::assertNull($semLocalizacao?->location, 'gateway antigo (sem o campo) continua funcionando');
+
+        $foraDaFaixa = WebhookEvent::fromArray(['eventId' => 'e3', 'sessionId' => 's1', 'type' => 'message.received', 'data' => $base + [
+            'location' => ['latitude' => 95, 'longitude' => 10],
+        ]])->message();
+        self::assertNull($foraDaFaixa?->location);
+    }
+
+    public function testFakeSimulaLocalizacao(): void
+    {
+        $gw = new FakeWhatsappGateway();
+        $gw->startSession('s1', new WebhookTarget('https://app.test/hook/s1', self::SECRET));
+
+        $msg = WebhookEvent::fromJson($gw->simulateIncomingLocation('s1', '5516900001111', -21.2, -47.8, live: true)->rawBody)->message();
+
+        self::assertSame('liveLocationMessage', $msg?->messageType);
+        self::assertNull($msg?->text);
+        self::assertSame(-21.2, $msg?->location?->latitude);
+        self::assertTrue($msg?->location?->live);
+    }
+
     public function testMensagemSemLidNemTelefoneEInvalida(): void
     {
         $event = WebhookEvent::fromArray([
